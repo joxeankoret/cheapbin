@@ -4,6 +4,7 @@
 #include "chipemu.h"
 #include "style.h"
 #include "audio.h"
+#include "output.h"
 #include "display.h"
 #include "binview.h"
 #include "theme.h"
@@ -55,6 +56,17 @@ static void print_usage(const char *prog)
         "    --theme <name>   Force a UI theme: default, softice, td32\n"
         "    -r, --no-r2      Disable radare2 backend; use built-in fake\n"
         "                       disasm/hex/regs instead\n"
+        "    --output <file>          Write the song to a WAV file instead of\n"
+        "                             playing it (single mixed track)\n"
+        "    --output-tracks <prefix> Write one WAV per channel:\n"
+        "                             <prefix>_lead.wav, _harmony.wav, _bass.wav,\n"
+        "                             _arpeggio.wav, _pad.wav, _drums.wav\n"
+        "    --output-midi <file>     Write a multi-track MIDI file (one track\n"
+        "                             per channel) for import into a DAW\n"
+        "    --output-musicxml <file> Write a MusicXML score (one part per\n"
+        "                             channel) for notation editors\n"
+        "    --no-fx                  With --output/--output-tracks, write the\n"
+        "                             raw mix without cheapbin's audio effects\n"
         "    -h, --help       Show this help\n"
         "\n"
         "  \033[90mControls:\033[0m\n"
@@ -79,6 +91,12 @@ int main(int argc, char *argv[])
     int forced_scale = -1;   /* -1 = use binary-derived scale */
     int forced_theme = -1;   /* -1 = use default theme */
     int use_r2       = 1;    /* 0 = force fallback disasm/hex/regs */
+
+    const char *output_path    = NULL;  /* --output <file>          */
+    const char *output_tracks  = NULL;  /* --output-tracks <prefix> */
+    const char *output_midi    = NULL;  /* --output-midi <file>     */
+    const char *output_musicxml = NULL; /* --output-musicxml <file> */
+    int output_apply_fx        = 1;     /* --no-fx clears this       */
 
     /* ── Parse arguments ── */
     for (int i = 1; i < argc; i++) {
@@ -137,6 +155,32 @@ int main(int argc, char *argv[])
         } else if (strcmp(argv[i], "-r") == 0 ||
                    strcmp(argv[i], "--no-r2") == 0) {
             use_r2 = 0;
+        } else if (strcmp(argv[i], "--output") == 0) {
+            if (i + 1 >= argc) {
+                fprintf(stderr, "error: --output requires a file path\n");
+                return 1;
+            }
+            output_path = argv[++i];
+        } else if (strcmp(argv[i], "--output-tracks") == 0) {
+            if (i + 1 >= argc) {
+                fprintf(stderr, "error: --output-tracks requires a path prefix\n");
+                return 1;
+            }
+            output_tracks = argv[++i];
+        } else if (strcmp(argv[i], "--output-midi") == 0) {
+            if (i + 1 >= argc) {
+                fprintf(stderr, "error: --output-midi requires a file path\n");
+                return 1;
+            }
+            output_midi = argv[++i];
+        } else if (strcmp(argv[i], "--output-musicxml") == 0) {
+            if (i + 1 >= argc) {
+                fprintf(stderr, "error: --output-musicxml requires a file path\n");
+                return 1;
+            }
+            output_musicxml = argv[++i];
+        } else if (strcmp(argv[i], "--no-fx") == 0) {
+            output_apply_fx = 0;
         } else if (argv[i][0] == '-') {
             fprintf(stderr, "error: unknown option '%s'\n", argv[i]);
             print_usage(argv[0]);
@@ -170,6 +214,27 @@ int main(int argc, char *argv[])
         free(data);
         composition_free(&comp);
         return 1;
+    }
+
+    /* ── Offline output to disk (no audio device, no UI) ── */
+    if (output_path || output_tracks || output_midi || output_musicxml) {
+        ChipType out_chip = (forced_chip >= 0)
+                          ? (ChipType)forced_chip
+                          : chip_select_from_data(data, size);
+        StyleType out_style = (forced_style >= 0)
+                            ? (StyleType)forced_style
+                            : STYLE_NONE;
+        OutputOptions opts = {
+            .mixed_path    = output_path,
+            .tracks_prefix = output_tracks,
+            .midi_path     = output_midi,
+            .musicxml_path = output_musicxml,
+            .apply_fx      = output_apply_fx != 0,
+        };
+        int orc = output_run(&comp, out_chip, out_style, &opts);
+        free(data);
+        composition_free(&comp);
+        return orc == 0 ? 0 : 1;
     }
 
     /* ── Init synth ── */

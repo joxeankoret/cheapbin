@@ -543,6 +543,10 @@ void synth_init(SynthState *s, Composition *comp)
     s->paused       = false;
     s->scale_type   = (ScaleType)comp->scale_index;
 
+    /* offline-output defaults: full mix, effects on (matches playback) */
+    s->channel_mask = 0xFFFFFFFFu;
+    s->apply_fx     = true;
+
     s->sections        = comp->sections;
     s->num_sections    = comp->num_sections;
     s->current_section = 0;
@@ -913,6 +917,7 @@ void synth_render(SynthState *s, int16_t *buffer, int num_samples)
         for (int c = 0; c < NUM_CHANNELS; c++) {
             Channel *ch = &s->channels[c];
             if (c == CH_DRUMS) continue;  /* drums handled separately */
+            if (!(s->channel_mask & (1u << c))) continue;  /* muted for output */
             if (ch->env.stage == ENV_IDLE) continue;
 
             /* ── chip: adjust waveform / duty before generation ── */
@@ -951,28 +956,32 @@ void synth_render(SynthState *s, int16_t *buffer, int num_samples)
 
         /* drum mix */
         float drum_mix = 0.0f;
-        for (int d = 0; d < 4; d++)
-            drum_mix += drum_process(&s->drum_voices[d]);
-        drum_mix *= s->channels[CH_DRUMS].volume;
-        drum_mix = chip_color_sample(&s->chip_state, drum_mix, CH_DRUMS);
-        mix += drum_mix;
+        if (s->channel_mask & (1u << CH_DRUMS)) {  /* muted for output */
+            for (int d = 0; d < 4; d++)
+                drum_mix += drum_process(&s->drum_voices[d]);
+            drum_mix *= s->channels[CH_DRUMS].volume;
+            drum_mix = chip_color_sample(&s->chip_state, drum_mix, CH_DRUMS);
+            mix += drum_mix;
 
-        float abs_drum = fabsf(drum_mix);
-        if (abs_drum > level_accum[CH_DRUMS])
-            level_accum[CH_DRUMS] = abs_drum;
+            float abs_drum = fabsf(drum_mix);
+            if (abs_drum > level_accum[CH_DRUMS])
+                level_accum[CH_DRUMS] = abs_drum;
+        }
 
-        /* echo / delay */
-        float delayed = s->delay_buf[s->delay_read % DELAY_SIZE];
-        float echo_in = mix + delayed * s->delay_feedback;
-        s->delay_buf[s->delay_write % DELAY_SIZE] = echo_in;
-        s->delay_write = (s->delay_write + 1) % DELAY_SIZE;
-        s->delay_read  = (s->delay_read + 1) % DELAY_SIZE;
-        mix = mix + delayed * s->delay_mix;
+        if (s->apply_fx) {
+            /* echo / delay */
+            float delayed = s->delay_buf[s->delay_read % DELAY_SIZE];
+            float echo_in = mix + delayed * s->delay_feedback;
+            s->delay_buf[s->delay_write % DELAY_SIZE] = echo_in;
+            s->delay_write = (s->delay_write + 1) % DELAY_SIZE;
+            s->delay_read  = (s->delay_read + 1) % DELAY_SIZE;
+            mix = mix + delayed * s->delay_mix;
 
-        /* one-pole LPF */
-        s->lpf_state = s->lpf_alpha * s->lpf_state +
-                       (1.0f - s->lpf_alpha) * mix;
-        mix = s->lpf_state;
+            /* one-pole LPF */
+            s->lpf_state = s->lpf_alpha * s->lpf_state +
+                           (1.0f - s->lpf_alpha) * mix;
+            mix = s->lpf_state;
+        }
 
         /* master fade */
         if (s->master_fade < s->fade_target) {
@@ -986,13 +995,19 @@ void synth_render(SynthState *s, int16_t *buffer, int num_samples)
         }
         mix *= s->master_fade;
 
-        /* chip post-processing (filters, quantisation, etc.) */
-        mix = chip_post_process(&s->chip_state, mix);
+        if (s->apply_fx) {
+            /* chip post-processing (filters, quantisation, etc.) */
+            mix = chip_post_process(&s->chip_state, mix);
 
-        /* soft clip */
-        if (mix > 1.0f) mix = 1.0f;
-        else if (mix < -1.0f) mix = -1.0f;
-        else mix = mix * (1.5f - 0.5f * mix * mix);
+            /* soft clip */
+            if (mix > 1.0f) mix = 1.0f;
+            else if (mix < -1.0f) mix = -1.0f;
+            else mix = mix * (1.5f - 0.5f * mix * mix);
+        } else {
+            /* raw output: hard-clamp only, to stay within int16 range */
+            if (mix > 1.0f) mix = 1.0f;
+            else if (mix < -1.0f) mix = -1.0f;
+        }
 
         buffer[i] = (int16_t)(mix * 30000.0f);
     }

@@ -98,6 +98,14 @@ typedef struct {
     MusicEvent  *styled_events;    /* malloc'd transformed copy, or NULL */
 
     ScaleType    scale_type;       /* current scale (mirrors comp->scale_index) */
+
+    /* ── Offline output controls (playback leaves these at defaults) ──
+       channel_mask: bit c enables channel c in the mix (default: all on).
+       apply_fx:     when false, synth_render skips the shared effect chain
+                     (echo/delay, LPF, chip post-processing, soft-clip) and
+                     emits the raw channel sum. */
+    uint32_t     channel_mask;
+    bool         apply_fx;
 } SynthState;
 
 void synth_init(SynthState *s, Composition *comp);

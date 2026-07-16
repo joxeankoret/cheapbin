@@ -26,6 +26,10 @@ add_executable(cheapbin
     src/chipemu.c
     src/style.c
     src/binview.c
+    src/wavwrite.c
+    src/midiwrite.c
+    src/musicxmlwrite.c
+    src/output.c
     ${PLATFORM_AUDIO_SRC}
     src/display.c
     src/theme.c

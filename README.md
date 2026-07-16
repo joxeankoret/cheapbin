@@ -145,6 +145,44 @@ cp assets/cheapbin-icon.png /storage/miniplus/skins/Default/icons/cheapbin.png
 
 ---
 
+## Output to file
+
+Instead of playing, cheapbin can write the song to disk. These flags are opt-in
+— without one, nothing is ever written and playback is unchanged. They honour
+`--chip`, `--style` and `--scale`, and skip the UI and audio device entirely.
+
+```bash
+# One mixed WAV — exactly what you'd hear (16-bit / 44100 Hz mono)
+./build/cheapbin --output song.wav /bin/ls
+
+# One WAV per channel, for import into a DAW. Produces:
+#   tracks_lead.wav  _harmony.wav  _bass.wav  _arpeggio.wav  _pad.wav  _drums.wav
+./build/cheapbin --output-tracks tracks /bin/ls
+
+# Skip cheapbin's effect chain (echo/reverb, filter, soft-clip) for a raw mix
+./build/cheapbin --output-tracks tracks --no-fx /bin/ls
+
+# Multi-track MIDI (.mid) — one track per channel, drums on the GM percussion
+# channel. Import into any DAW to remap instruments and edit the notes.
+./build/cheapbin --output-midi song.mid --style synthwave /bin/ls
+
+# MusicXML score (.musicxml) — one part per channel, in 4/4 with the song's
+# tempo. Open in MuseScore or any notation editor.
+./build/cheapbin --output-musicxml song.musicxml /bin/ls
+```
+
+The per-channel WAV tracks are the same length and start together, so they line
+up on a DAW timeline. With effects on, each track carries cheapbin's reverb tail
+and the non-linear chip/soft-clip stages, so the tracks won't sum bit-exact back
+to the mixed file — use `--no-fx` for clean, linearly-summing tracks.
+
+MIDI and MusicXML carry the notes only (no chip timbre or playback swing) and
+reflect the active `--style`. MIDI keeps full polyphony; MusicXML is a notation
+format, so each part is reduced to a single monophonic voice (chords collapse to
+their top note) — use the MIDI export if you need every note.
+
+---
+
 ## Themes
 
 Three built-in UI themes, cycled with `t`:
