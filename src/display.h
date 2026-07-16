@@ -35,4 +35,9 @@ void display_cycle_theme_prev(void);
 /* Set a specific theme directly. */
 void display_set_theme(int theme);
 
+/* Force a full screen clear on the next display_update. Call this when
+   something outside the display (chip/style/scale name, etc.) may shrink
+   between frames and leave stale characters. */
+void display_request_clear(void);
+
 #endif

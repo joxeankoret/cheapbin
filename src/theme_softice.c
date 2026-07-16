@@ -785,9 +785,13 @@ void theme_softice_draw(const SynthState *s)
     int w = di_cols();
     int h = di_rows();
 
-    /* Fill entire screen with black */
-    for (int r = 1; r <= h; r++)
-        si_clear_row(r, w);
+    /* Fill entire screen with black — only on a full-repaint frame.
+       Blanking every cell each frame re-introduces the flicker the
+       display layer works to avoid; on ordinary frames the background is
+       already on screen and content is redrawn in place over it. */
+    if (di_full_repaint())
+        for (int r = 1; r <= h; r++)
+            si_clear_row(r, w);
 
     /*
      * Layout (authentic SoftICE arrangement):

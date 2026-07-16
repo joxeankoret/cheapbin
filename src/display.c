@@ -15,9 +15,12 @@ static struct termios s_orig_termios;
 static bool           s_raw_mode = false;
 static int            s_cols;
 static int            s_rows;
+static bool           s_need_clear = true;
+static bool           s_full_repaint = true;
 
 static void get_term_size(void)
 {
+    int prev_cols = s_cols, prev_rows = s_rows;
     struct winsize w;
     if (ioctl(STDOUT_FILENO, TIOCGWINSZ, &w) == 0) {
         s_cols = w.ws_col;
@@ -26,6 +29,7 @@ static void get_term_size(void)
         s_cols = 80;
         s_rows = 24;
     }
+    if (s_cols != prev_cols || s_rows != prev_rows) s_need_clear = true;
 }
 
 /* ── Output buffer — ALL rendering goes through this ───────────────── */
@@ -72,6 +76,7 @@ static uint32_t s_rng = 0x12345678;
 int          di_cols(void)     { return s_cols; }
 int          di_rows(void)     { return s_rows; }
 int          di_frame(void)    { return s_frame; }
+bool         di_full_repaint(void) { return s_full_repaint; }
 const char  *di_filename(void) { return s_filename; }
 size_t       di_filesize(void) { return s_filesize; }
 BinView     *di_binview(void)  { return s_bv; }
@@ -165,17 +170,24 @@ int display_poll_key(void)
 void display_cycle_theme(void)
 {
     s_theme = theme_next(s_theme);
+    s_need_clear = true;
 }
 
 void display_cycle_theme_prev(void)
 {
     s_theme = theme_prev(s_theme);
+    s_need_clear = true;
 }
 
 void display_set_theme(int theme)
 {
     if (theme >= 0 && theme < NUM_THEMES)
         s_theme = (ThemeType)theme;
+}
+
+void display_request_clear(void)
+{
+    s_need_clear = true;
 }
 
 /* ── Main display update — dispatch to current theme ───────────────── */
@@ -186,7 +198,12 @@ void display_update(const SynthState *s)
     s_frame++;
     s_pos = 0;
 
-    buf_printf(HOME CLEAR);
+    s_full_repaint = s_need_clear;
+    if (s_need_clear) {
+        buf_printf(CLEAR);
+        s_need_clear = false;
+    }
+    buf_printf(HOME);
 
     switch (s_theme) {
     case THEME_SOFTICE: theme_softice_draw(s); break;

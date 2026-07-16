@@ -12,6 +12,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <signal.h>
+#include <stdbool.h>
 #include <unistd.h>
 #include <libgen.h>
 
@@ -224,6 +225,7 @@ int main(int argc, char *argv[])
 
     /* ── Main loop ── */
     int paused = 0;
+    bool need_clear = false;
     while (!g_quit) {
         /* poll keyboard */
         int key = display_poll_key();
@@ -238,20 +240,26 @@ int main(int argc, char *argv[])
                 audio_resume();
         } else if (key == 'c') {
             synth_set_chip(&synth, chip_next(synth.chip_type));
+            need_clear = true;
         } else if (key == 'C') {
             synth_set_chip(&synth, chip_prev(synth.chip_type));
+            need_clear = true;
         } else if (key == 's') {
             current_style = style_next(current_style);
             synth_apply_style(&synth, current_style, &comp);
+            need_clear = true;
         } else if (key == 'S') {
             current_style = style_prev(current_style);
             synth_apply_style(&synth, current_style, &comp);
+            need_clear = true;
         } else if (key == 'k') {
             ScaleType next = scale_next(synth.scale_type);
             synth_set_scale(&synth, data, size, (int)next, &comp);
+            need_clear = true;
         } else if (key == 'K') {
             ScaleType prev = scale_prev(synth.scale_type);
             synth_set_scale(&synth, data, size, (int)prev, &comp);
+            need_clear = true;
         } else if (key == 't') {
             display_cycle_theme();
         } else if (key == 'T') {
@@ -265,6 +273,11 @@ int main(int argc, char *argv[])
             int step = (int)(synth.bpm * 4.0f / 60.0f * 5.0f);
             if (step < 1) step = 1;
             synth_seek(&synth, -step);
+        }
+
+        if (need_clear) {
+            display_request_clear();
+            need_clear = false;
         }
 
         /* update display */

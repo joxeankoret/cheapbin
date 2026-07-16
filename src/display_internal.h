@@ -9,6 +9,7 @@
 
 #include "synth.h"
 #include "binview.h"
+#include <stdbool.h>
 
 /* ── ANSI escape codes ─────────────────────────────────────────────── */
 
@@ -44,6 +45,11 @@ void buf_flush(void);
 int          di_cols(void);
 int          di_rows(void);
 int          di_frame(void);
+/* True on frames where the screen was just cleared (first frame, resize,
+   theme/chip/style/scale change). Themes that paint a solid background use
+   this to repaint the whole background only when needed, instead of every
+   frame — a full per-frame bg fill re-introduces flicker. */
+bool         di_full_repaint(void);
 const char  *di_filename(void);
 size_t       di_filesize(void);
 BinView     *di_binview(void);
